@@ -37,8 +37,7 @@ public class UserDao {
                 }
             }, resultSet -> {
                 try {
-                    String uname = resultSet.getString(1);
-                    result.set(null != uname && uname.equals(userName));
+                    result.set(resultSet.next());
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }

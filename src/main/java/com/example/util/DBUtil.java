@@ -1,18 +1,16 @@
 package com.example.util;
 
-import org.omg.CORBA.UNSUPPORTED_POLICY;
-
 import java.sql.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 public class DBUtil {
-    private static final String DB_URL = "jdbc:mysql://localhost:3306/test_http";  //数据库的连接地址
-    private static final String DB_USER = "root";   //数据库用户名
-    private static final String DB_PASSWORD = "12345";   //数据库密码
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/test_http";
+    private static final String DB_USER = "root";
+    private static final String DB_PASSWORD = "12345";
     private static final BlockingQueue<Connection> ACTIVE_CONNECTIONS = new ArrayBlockingQueue<>(10);
-    private static final BlockingQueue<Connection> USING_CONNECTIONS = new ArrayBlockingQueue<>(10);
 
     static {
         try {
@@ -21,34 +19,33 @@ public class DBUtil {
                 ACTIVE_CONNECTIONS.offer(conn);
             }
         } catch (Exception e) {
-            System.out.println("cannot get connection,system exit");
+            System.out.println("cannot get connection, system exit");
             e.printStackTrace();
             System.exit(-1);
         }
     }
 
     public static int executeUpdate(String sql, Consumer<PreparedStatement> consumer) throws SQLException {
-        PreparedStatement ps = null;
         Connection connection = null;
+        PreparedStatement ps = null;
         try {
             connection = getConnection();
             ps = connection.prepareStatement(sql);
             consumer.accept(ps);
             return ps.executeUpdate();
         } finally {
-            if (null != ps) {
+            if (ps != null) {
                 ps.close();
             }
-            if (null != connection) {
-                ACTIVE_CONNECTIONS.offer(connection);
-                USING_CONNECTIONS.remove(connection);
+            if (connection != null) {
+                returnConnection(connection);
             }
         }
     }
 
     public static void executeQuery(String sql, Consumer<PreparedStatement> psConsumer, Consumer<ResultSet> resultSetConsumer) throws SQLException {
-        PreparedStatement ps = null;
         Connection connection = null;
+        PreparedStatement ps = null;
         ResultSet resultSet = null;
         try {
             connection = getConnection();
@@ -57,34 +54,38 @@ public class DBUtil {
             resultSet = ps.executeQuery();
             resultSetConsumer.accept(resultSet);
         } finally {
-            if (null != ps) {
-                ps.close();
-            }
-            if (null != resultSet) {
+            if (resultSet != null) {
                 resultSet.close();
             }
-            if (null != connection) {
+            if (ps != null) {
+                ps.close();
+            }
+            if (connection != null) {
+                returnConnection(connection);
+            }
+        }
+    }
+
+    private static Connection getConnection() throws SQLException {
+        try {
+            Connection connection = ACTIVE_CONNECTIONS.poll(500, TimeUnit.MILLISECONDS);
+            if (connection == null || !connection.isValid(2)) {
+                throw new SQLException("Failed to obtain a valid connection from the pool.");
+            }
+            return connection;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new SQLException("Thread was interrupted while waiting for connection.", e);
+        }
+    }
+
+    private static void returnConnection(Connection connection) {
+        try {
+            if (!connection.isClosed()) {
                 ACTIVE_CONNECTIONS.offer(connection);
-                USING_CONNECTIONS.remove(connection);
             }
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
     }
-
-    private static Connection getConnection() {
-        while (true) {
-            Connection connection = ACTIVE_CONNECTIONS.poll();
-            if (connection == null) {
-                try {
-                    Thread.currentThread().wait(100);
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-            } else {
-                USING_CONNECTIONS.offer(connection);
-                return connection;
-            }
-        }
-    }
-
-
 }

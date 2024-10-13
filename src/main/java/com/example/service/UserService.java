@@ -4,7 +4,12 @@ import com.example.dao.UserDao;
 
 public class UserService {
 
+    private static final UserService INSTANCE = new UserService();
     private static final UserDao userDao = new UserDao();
+
+    public static UserService getInstance(){
+        return INSTANCE;
+    }
 
     public void register(String userName, String password) {
         checkParam(userName, password);
