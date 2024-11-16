@@ -16,7 +16,6 @@ import java.util.Map;
 public class HttpUtil {
 
     private HttpUtil() {
-        throw new IllegalStateException();
     }
 
     /**
